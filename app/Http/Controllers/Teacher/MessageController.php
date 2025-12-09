@@ -9,6 +9,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class MessageController extends Controller
 {
@@ -68,7 +69,27 @@ class MessageController extends Controller
                 ->where('receiver_id', $teacherId);
         })
             ->orderBy('created_at')
-            ->get();
+            ->get()
+            ->map(function ($message) {
+                $data = [
+                    'id' => $message->id,
+                    'sender_id' => $message->sender_id,
+                    'receiver_id' => $message->receiver_id,
+                    'message' => $message->message,
+                    'is_read' => $message->is_read,
+                    'created_at' => $message->created_at->toDateTimeString(),
+                ];
+
+                // Include file information if present
+                if ($message->file_path) {
+                    $data['file_path'] = $message->file_path;
+                    $data['file_name'] = $message->file_name;
+                    $data['file_type'] = $message->file_type;
+                    $data['file_size'] = $message->file_size;
+                }
+
+                return $data;
+            });
 
         return response()->json([
             'messages' => $messages,
@@ -105,5 +126,28 @@ class MessageController extends Controller
             'message' => $message,
         ]);
     }
-}
 
+    public function download(Message $message)
+    {
+        $this->checkTeacher();
+
+        $teacher = Auth::user();
+
+        // Check if teacher is sender or receiver
+        if ($message->sender_id !== $teacher->id && $message->receiver_id !== $teacher->id) {
+            abort(403, 'Unauthorized access.');
+        }
+
+        if (! $message->file_path) {
+            abort(404, 'File not found.');
+        }
+
+        if (! Storage::disk('public')->exists($message->file_path)) {
+            abort(404, 'File not found.');
+        }
+
+        $fullPath = Storage::disk('public')->path($message->file_path);
+
+        return response()->download($fullPath, $message->file_name);
+    }
+}

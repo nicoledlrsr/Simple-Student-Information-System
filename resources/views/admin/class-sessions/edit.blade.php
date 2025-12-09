@@ -197,6 +197,8 @@
                             <option value="{{ $subjectOption->subject_name }}" 
                                 data-course="{{ $subjectOption->course }}"
                                 data-code="{{ $subjectOption->subject_code }}"
+                                data-schedule="{{ $subjectOption->schedule ?? '' }}"
+                                data-time="{{ $subjectOption->time ?? '' }}"
                                 {{ old('subject', $session->subject) === $subjectOption->subject_name ? 'selected' : '' }}>
                                 {{ $subjectOption->subject_name }}
                             </option>
@@ -326,13 +328,29 @@
                 }
             });
 
-            // When subject is selected, auto-select corresponding code
+            // When subject is selected, auto-select corresponding code and populate schedule/time
             subjectSelect.addEventListener('change', function() {
                 const selectedSubject = this.value;
                 const selectedOption = this.options[this.selectedIndex];
-                if (selectedOption && selectedOption.getAttribute('data-code')) {
-                    const code = selectedOption.getAttribute('data-code');
-                    codeSelect.value = code;
+                if (selectedOption) {
+                    // Auto-select corresponding code
+                    if (selectedOption.getAttribute('data-code')) {
+                        const code = selectedOption.getAttribute('data-code');
+                        codeSelect.value = code;
+                    }
+                    
+                    // Auto-populate schedule and time from subject
+                    const schedule = selectedOption.getAttribute('data-schedule');
+                    const time = selectedOption.getAttribute('data-time');
+                    const scheduleInput = document.getElementById('schedule');
+                    const timeInput = document.getElementById('time');
+                    
+                    if (schedule && scheduleInput) {
+                        scheduleInput.value = schedule;
+                    }
+                    if (time && timeInput) {
+                        timeInput.value = time;
+                    }
                 }
             });
 

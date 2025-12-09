@@ -16,6 +16,8 @@ class Subject extends Model
         'semester',
         'units',
         'hours_per_week',
+        'schedule',
+        'time',
         'description',
         'instructor_id',
     ];

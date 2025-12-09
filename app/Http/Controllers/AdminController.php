@@ -18,13 +18,13 @@ use App\Services\SectionAssignmentService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 
 class AdminController extends Controller
 {
@@ -74,6 +74,7 @@ class AdminController extends Controller
 
         $eventsByDate = $events->groupBy(function (SchoolEvent $event): string {
             $eventDate = $event->date instanceof Carbon ? $event->date : Carbon::parse($event->date);
+
             return $eventDate->format('Y-m-d');
         });
 
@@ -226,7 +227,7 @@ class AdminController extends Controller
 
         // Refresh user to get latest section relationship
         $enrollment->user->refresh();
-        
+
         // Send welcome notification to student
         $assignedSection = $enrollment->user->section;
         $sectionMessage = $assignedSection ? " You have been assigned to section {$assignedSection->name}." : '';
@@ -313,16 +314,45 @@ class AdminController extends Controller
         $classSession = ClassSession::findOrFail($validated['class_session_id']);
 
         // Calculate expiration time based on session end time
-        $sessionDate = \Carbon\Carbon::parse($validated['date']);
-        $endTimeCarbon = \Carbon\Carbon::parse($classSession->end_time);
+        $sessionDate = \Carbon\Carbon::parse($validated['date'])->startOfDay();
+        $expiresAt = null;
 
-        // Build expiration time using the session date and end time
-        $expiresAt = $sessionDate->copy()
-            ->setTime($endTimeCarbon->hour, $endTimeCarbon->minute, $endTimeCarbon->second);
+        // Parse end time from class session
+        if ($classSession->end_time) {
+            // Use end_time field if available (format: "09:30:00")
+            $endTimeParts = explode(':', $classSession->end_time);
+            // Set expiration to 2 minutes after class ends to allow submissions until class ends
+            $expiresAt = $sessionDate->copy()
+                ->setTime((int) $endTimeParts[0], (int) ($endTimeParts[1] ?? 0), (int) ($endTimeParts[2] ?? 0))
+                ->addMinutes(2);
+        } elseif ($classSession->time) {
+            // Fallback to parsing from time string field (format: "8:00 AM - 9:30 AM")
+            $timeString = $classSession->time;
+            // Try to extract end time from string like "8:00 AM - 9:30 AM" or "8:00AM-9:30AM"
+            if (preg_match('/(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i', $timeString, $matches)) {
+                $endHour = (int) $matches[4];
+                $endMinute = (int) $matches[5];
+                $endPeriod = strtoupper($matches[6]);
 
-        // If session has already ended today, set expiration to end of today
-        if ($expiresAt->isPast() && $sessionDate->isToday()) {
-            $expiresAt = now()->endOfDay();
+                // Convert to 24-hour format
+                if ($endPeriod === 'PM' && $endHour !== 12) {
+                    $endHour += 12;
+                } elseif ($endPeriod === 'AM' && $endHour === 12) {
+                    $endHour = 0;
+                }
+
+                // Set expiration to 2 minutes after class ends to allow submissions until class ends
+                // This accounts for clock differences and ensures students can submit until the class actually ends
+                $expiresAt = $sessionDate->copy()
+                    ->setTime($endHour, $endMinute, 0)
+                    ->addMinutes(2);
+            }
+        }
+
+        // If we still don't have a valid expiration time, return error
+        if (! $expiresAt) {
+            return redirect()->route('admin.attendance.index')
+                ->with('error', 'Unable to determine class end time. Please ensure the class session has a valid time configuration.');
         }
 
         // Generate unique 6-character code
@@ -435,7 +465,7 @@ class AdminController extends Controller
         ]);
 
         $request = StudentRequest::findOrFail($id);
-        
+
         // If it's a shift request, update the student's course
         if ($request->request_type === 'shift' && $request->target_course) {
             $student = $request->user;
@@ -445,7 +475,7 @@ class AdminController extends Controller
                 'section_id' => null,
             ]);
         }
-        
+
         $request->update([
             'status' => 'approved',
             'admin_remarks' => $validated['remarks'] ?? null,
@@ -514,7 +544,7 @@ class AdminController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email,' . Auth::id()],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email,'.Auth::id()],
             'contact_number' => ['nullable', 'string', 'max:255'],
             'profile_image' => ['nullable', 'image', 'max:2048'],
         ]);
@@ -531,7 +561,7 @@ class AdminController extends Controller
             if ($user->profile_image) {
                 Storage::disk('public')->delete($user->profile_image);
             }
-            $updateData['profile_image'] = $request->file('profile_image')->store('profiles/' . $user->id, 'public');
+            $updateData['profile_image'] = $request->file('profile_image')->store('profiles/'.$user->id, 'public');
         }
 
         $user->update($updateData);
@@ -551,7 +581,7 @@ class AdminController extends Controller
         /** @var User $user */
         $user = Auth::user();
 
-        if (!Hash::check($validated['current_password'], $user->password)) {
+        if (! Hash::check($validated['current_password'], $user->password)) {
             return redirect()->route('admin.settings')->with('error', 'Current password is incorrect.');
         }
 

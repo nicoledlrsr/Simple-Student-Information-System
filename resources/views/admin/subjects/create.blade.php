@@ -81,6 +81,24 @@
                     </div>
                 </div>
 
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 6px; color: #374151; font-weight: 500;">Schedule (Day/s)</label>
+                        <input type="text" name="schedule" value="{{ old('schedule') }}" placeholder="e.g., MWF" style="width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px;">
+                        @error('schedule')
+                            <p style="color: #EF4444; font-size: 0.875rem; margin-top: 4px;">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 6px; color: #374151; font-weight: 500;">Time</label>
+                        <input type="text" name="time" value="{{ old('time') }}" placeholder="e.g., 8:00 AM - 9:30 AM" style="width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px;">
+                        @error('time')
+                            <p style="color: #EF4444; font-size: 0.875rem; margin-top: 4px;">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
+
                 <div style="margin-bottom: 16px;">
                     <label style="display: block; margin-bottom: 6px; color: #374151; font-weight: 500;">Instructor</label>
                     <select name="instructor_id" style="width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px;">

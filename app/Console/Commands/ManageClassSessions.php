@@ -34,6 +34,21 @@ class ManageClassSessions extends Command
         $today = $now->toDateString();
         $currentTime = $now->format('H:i:s');
 
+        // Automatically deactivate all expired attendance codes
+        $expiredCodes = AttendanceCode::where('is_active', true)
+            ->where('expires_at', '<=', $now)
+            ->get();
+
+        if ($expiredCodes->isNotEmpty()) {
+            $deactivatedCount = AttendanceCode::where('is_active', true)
+                ->where('expires_at', '<=', $now)
+                ->update(['is_active' => false]);
+
+            if ($deactivatedCount > 0) {
+                $this->info("Automatically deactivated {$deactivatedCount} expired attendance code(s).");
+            }
+        }
+
         // Get all active class sessions
         $sessions = ClassSession::where('is_active', true)->get();
 

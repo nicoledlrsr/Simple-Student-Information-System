@@ -5,17 +5,17 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Subject;
 use App\Models\User;
-use Illuminate\Support\Collection;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
 class SubjectManagementController extends Controller
 {
     private function checkAdmin(): void
     {
-        if (!Auth::check() || Auth::user()->role !== 'admin') {
+        if (! Auth::check() || Auth::user()->role !== 'admin') {
             abort(403, 'Unauthorized access.');
         }
     }
@@ -64,6 +64,8 @@ class SubjectManagementController extends Controller
             'semester' => ['nullable', 'string', 'max:255'],
             'units' => ['required', 'integer', 'min:1'],
             'hours_per_week' => ['nullable', 'integer'],
+            'schedule' => ['nullable', 'string', 'max:255'],
+            'time' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'instructor_id' => ['nullable', 'exists:users,id'],
         ]);
@@ -84,6 +86,8 @@ class SubjectManagementController extends Controller
             'semester' => $validated['semester'] ?? null,
             'units' => $validated['units'],
             'hours_per_week' => $validated['hours_per_week'] ?? null,
+            'schedule' => $validated['schedule'] ?? null,
+            'time' => $validated['time'] ?? null,
             'description' => $validated['description'] ?? null,
             'instructor_id' => $validated['instructor_id'] ?? null,
         ]);
@@ -109,7 +113,7 @@ class SubjectManagementController extends Controller
         $this->checkAdmin();
 
         $validated = $request->validate([
-            'code' => ['required', 'string', 'max:255', 'unique:subjects,subject_code,' . $subject->id],
+            'code' => ['required', 'string', 'max:255', 'unique:subjects,subject_code,'.$subject->id],
             'name' => ['required', 'string', 'max:255'],
             'course' => ['required', 'string', 'max:255'],
             'custom_course' => ['nullable', 'string', 'max:255'],
@@ -117,6 +121,8 @@ class SubjectManagementController extends Controller
             'semester' => ['nullable', 'string', 'max:255'],
             'units' => ['required', 'integer', 'min:1'],
             'hours_per_week' => ['nullable', 'integer'],
+            'schedule' => ['nullable', 'string', 'max:255'],
+            'time' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'instructor_id' => ['nullable', 'exists:users,id'],
         ]);
@@ -137,6 +143,8 @@ class SubjectManagementController extends Controller
             'semester' => $validated['semester'] ?? null,
             'units' => $validated['units'],
             'hours_per_week' => $validated['hours_per_week'] ?? null,
+            'schedule' => $validated['schedule'] ?? null,
+            'time' => $validated['time'] ?? null,
             'description' => $validated['description'] ?? null,
             'instructor_id' => $validated['instructor_id'] ?? null,
         ]);

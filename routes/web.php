@@ -13,7 +13,6 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnrollmentController;
 use App\Http\Controllers\Student\AttendanceController;
-use App\Http\Controllers\Student\DocumentsController;
 use App\Http\Controllers\Student\InstructorsController;
 use App\Http\Controllers\Student\PortalController;
 use App\Http\Controllers\Student\RequestController;
@@ -48,7 +47,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/attendance/submit-code', [AttendanceController::class, 'submitCode'])->name('attendance.submit-code');
     Route::post('/notifications/{id}/read', [AttendanceController::class, 'markNotificationRead'])->name('notifications.read');
     Route::get('/grades', [\App\Http\Controllers\Student\GradesController::class, 'index'])->name('grades');
-    
+
     // Student Portal with Tabs
     Route::get('/student-portal', [PortalController::class, 'index'])->name('student.portal');
 
@@ -93,6 +92,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/messages', [\App\Http\Controllers\Teacher\MessageController::class, 'index'])->name('messages.index');
         Route::post('/messages/send', [\App\Http\Controllers\Teacher\MessageController::class, 'send'])->name('messages.send');
         Route::get('/messages/fetch', [\App\Http\Controllers\Teacher\MessageController::class, 'fetch'])->name('messages.fetch');
+        Route::get('/messages/{message}/download', [\App\Http\Controllers\Teacher\MessageController::class, 'download'])->name('teacher.messages.download');
         Route::get('/settings', [\App\Http\Controllers\Teacher\SettingsController::class, 'index'])->name('settings.index');
         Route::post('/settings/profile', [\App\Http\Controllers\Teacher\SettingsController::class, 'updateProfile'])->name('settings.profile');
         Route::post('/settings/password', [\App\Http\Controllers\Teacher\SettingsController::class, 'updatePassword'])->name('settings.password');

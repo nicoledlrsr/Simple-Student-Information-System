@@ -145,6 +145,12 @@
             const chatSubtitle = document.getElementById('chatSubtitle');
             let selectedStudent = null;
 
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
             function renderMessages(messages) {
                 chatWindow.innerHTML = '';
                 if (!messages.length) {
@@ -159,7 +165,57 @@
                     }
                     const bubble = document.createElement('div');
                     bubble.classList.add('bubble');
-                    bubble.textContent = msg.message;
+                    
+                    // Display message text if present
+                    if (msg.message) {
+                        const messageText = document.createElement('div');
+                        messageText.style.whiteSpace = 'pre-wrap';
+                        messageText.textContent = msg.message;
+                        bubble.appendChild(messageText);
+                    }
+                    
+                    // Display file attachment if present
+                    if (msg.file_name) {
+                        const fileDiv = document.createElement('div');
+                        fileDiv.style.marginTop = msg.message ? '8px' : '0';
+                        fileDiv.style.paddingTop = msg.message ? '8px' : '0';
+                        fileDiv.style.borderTop = msg.message ? '1px solid rgba(0,0,0,0.1)' : 'none';
+                        
+                        const fileLink = document.createElement('a');
+                        fileLink.href = `/teacher/messages/${msg.id}/download`;
+                        fileLink.target = '_blank';
+                        fileLink.style.display = 'inline-flex';
+                        fileLink.style.alignItems = 'center';
+                        fileLink.style.gap = '6px';
+                        fileLink.style.color = 'inherit';
+                        fileLink.style.textDecoration = 'none';
+                        fileLink.style.fontWeight = '500';
+                        
+                        const icon = document.createElement('i');
+                        icon.className = 'fas fa-paperclip';
+                        fileLink.appendChild(icon);
+                        
+                        const fileName = document.createElement('span');
+                        fileName.textContent = escapeHtml(msg.file_name);
+                        fileLink.appendChild(fileName);
+                        
+                        if (msg.file_size) {
+                            const fileSize = document.createElement('span');
+                            fileSize.style.fontSize = '0.75rem';
+                            fileSize.style.opacity = '0.8';
+                            fileSize.textContent = `(${(msg.file_size / 1024).toFixed(2)} KB)`;
+                            fileLink.appendChild(fileSize);
+                        }
+                        
+                        fileDiv.appendChild(fileLink);
+                        bubble.appendChild(fileDiv);
+                    }
+                    
+                    // If no message and no file, show placeholder
+                    if (!msg.message && !msg.file_name) {
+                        bubble.textContent = '(No content)';
+                    }
+                    
                     div.appendChild(bubble);
                     const meta = document.createElement('div');
                     meta.classList.add('meta');

@@ -33,7 +33,7 @@ class StudentController extends Controller
                 // If course or year level not assigned to teacher, return none
                 $query->whereRaw('1 = 0');
             })
-            ->with(['section'])
+            ->with(['section', 'documents'])
             ->orderBy('name')
             ->paginate(20);
 

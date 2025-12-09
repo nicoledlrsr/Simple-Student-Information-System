@@ -56,8 +56,24 @@ class ClassSession extends Model
 
     public function getTimeRangeAttribute(): string
     {
-        $start = \Carbon\Carbon::parse($this->start_time)->format('g:i A');
-        $end = \Carbon\Carbon::parse($this->end_time)->format('g:i A');
-        return $start.' - '.$end;
+        // First try to use start_time and end_time if available
+        if ($this->start_time && $this->end_time) {
+            try {
+                $start = \Carbon\Carbon::parse($this->start_time)->format('g:i A');
+                $end = \Carbon\Carbon::parse($this->end_time)->format('g:i A');
+
+                return $start.' - '.$end;
+            } catch (\Exception $e) {
+                // If parsing fails, fall through to time field
+            }
+        }
+
+        // Fall back to the time field (which comes from subject)
+        if ($this->time) {
+            return $this->time;
+        }
+
+        // If nothing is available, return N/A
+        return 'N/A';
     }
 }

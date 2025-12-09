@@ -32,14 +32,14 @@ class AttendanceController extends Controller
                     ->with('error', 'You must complete your enrollment before accessing this feature.');
             }
         }
-        
+
         return null;
     }
 
     public function index(): View|RedirectResponse
     {
         $user = Auth::user();
-        
+
         // Check if enrollment is approved
         $enrollmentStatus = $this->checkEnrollmentStatus($user);
         if ($enrollmentStatus !== null) {
@@ -98,11 +98,16 @@ class AttendanceController extends Controller
 
         if ($activeSessionEnrollment && $activeSessionEnrollment->classSession) {
             $session = $activeSessionEnrollment->classSession;
-            $startTime = $session->start_time;
             $endTime = $session->end_time;
 
-            // Check if session is currently active
-            if ($currentTime >= $startTime && $currentTime < $endTime) {
+            // Show active session if it hasn't ended yet (or if end time is not set)
+            if ($endTime) {
+                // Check if session hasn't ended yet
+                if ($currentTime < $endTime) {
+                    $activeSession = $session;
+                }
+            } else {
+                // If no end time is set, show the session
                 $activeSession = $session;
             }
         }
@@ -117,13 +122,13 @@ class AttendanceController extends Controller
     public function submitCode(Request $request): RedirectResponse
     {
         $user = Auth::user();
-        
+
         // Check if enrollment is approved
         $enrollmentStatus = $this->checkEnrollmentStatus($user);
         if ($enrollmentStatus !== null) {
             return $enrollmentStatus;
         }
-        
+
         $validated = $request->validate([
             'code' => ['required', 'string', 'size:6'],
         ]);
@@ -159,27 +164,57 @@ class AttendanceController extends Controller
         $now = now();
         $sessionDate = \Carbon\Carbon::parse($attendanceCode->date)->startOfDay();
 
-        // Parse time strings - MySQL TIME fields return as strings like "07:00:00"
-        // Extract time components from the time string
-        $startTimeParts = explode(':', $classSession->start_time);
-        $endTimeParts = explode(':', $classSession->end_time);
+        // Parse session times - handle both TIME fields and time string field
+        $sessionStart = null;
+        $sessionEnd = null;
 
-        // Build session start and end times using the session date
-        $sessionStart = $sessionDate->copy()
-            ->setTime((int) $startTimeParts[0], (int) ($startTimeParts[1] ?? 0), (int) ($startTimeParts[2] ?? 0));
-        $sessionEnd = $sessionDate->copy()
-            ->setTime((int) $endTimeParts[0], (int) ($endTimeParts[1] ?? 0), (int) ($endTimeParts[2] ?? 0));
+        if ($classSession->start_time && $classSession->end_time) {
+            // Use TIME fields if available (format: "07:00:00")
+            $startTimeParts = explode(':', $classSession->start_time);
+            $endTimeParts = explode(':', $classSession->end_time);
 
-        if ($now->lt($sessionStart)) {
-            return back()->withErrors(['code' => 'Session has not started yet. Please wait until '.$sessionStart->format('g:i A').' to submit.']);
+            $sessionStart = $sessionDate->copy()
+                ->setTime((int) $startTimeParts[0], (int) ($startTimeParts[1] ?? 0), (int) ($startTimeParts[2] ?? 0));
+            $sessionEnd = $sessionDate->copy()
+                ->setTime((int) $endTimeParts[0], (int) ($endTimeParts[1] ?? 0), (int) ($endTimeParts[2] ?? 0));
+        } elseif ($classSession->time) {
+            // Fallback to parsing from time string field (format: "8:00 AM - 9:30 AM")
+            $timeString = $classSession->time;
+            // Try to extract times from string like "8:00 AM - 9:30 AM" or "8:00AM-9:30AM"
+            if (preg_match('/(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i', $timeString, $matches)) {
+                $startHour = (int) $matches[1];
+                $startMinute = (int) $matches[2];
+                $startPeriod = strtoupper($matches[3]);
+                $endHour = (int) $matches[4];
+                $endMinute = (int) $matches[5];
+                $endPeriod = strtoupper($matches[6]);
+
+                // Convert to 24-hour format
+                if ($startPeriod === 'PM' && $startHour !== 12) {
+                    $startHour += 12;
+                } elseif ($startPeriod === 'AM' && $startHour === 12) {
+                    $startHour = 0;
+                }
+                if ($endPeriod === 'PM' && $endHour !== 12) {
+                    $endHour += 12;
+                } elseif ($endPeriod === 'AM' && $endHour === 12) {
+                    $endHour = 0;
+                }
+
+                $sessionStart = $sessionDate->copy()->setTime($startHour, $startMinute, 0);
+                $sessionEnd = $sessionDate->copy()->setTime($endHour, $endMinute, 0);
+            }
         }
 
-        // Allow submissions up to and including the end time
-        // Add 1 minute buffer to account for clock differences
-        $sessionEndWithBuffer = $sessionEnd->copy()->addMinute();
-        if ($now->gt($sessionEndWithBuffer)) {
-            return back()->withErrors(['code' => 'Session has ended. Code submissions are locked. The session ended at '.$sessionEnd->format('g:i A').'.']);
+        // If we still don't have valid times, return error
+        if (! $sessionStart || ! $sessionEnd) {
+            return back()->withErrors(['code' => 'Invalid session time configuration. Please contact your instructor.']);
         }
+
+        // Allow submissions at any time as long as the code hasn't expired
+        // The code expiration time is already checked above, so we only need to verify
+        // that the submission is within a reasonable window (code expiration handles the end time)
+        // No need to check for early submission restriction - attendance can be submitted at any time
 
         // Check if student has already used this code
         $existingAttendance = Attendance::where('user_id', $user->id)
@@ -201,6 +236,9 @@ class AttendanceController extends Controller
             return back()->withErrors(['code' => 'You are not enrolled in this class session.']);
         }
 
+        // Capture the exact submission time right before creating the record
+        $submissionTime = now();
+
         // Create attendance record with all required fields
         $attendance = Attendance::create([
             'user_id' => $user->id,
@@ -208,7 +246,7 @@ class AttendanceController extends Controller
             'attendance_code_id' => $attendanceCode->id,
             'date' => $attendanceCode->date,
             'status' => 'present',
-            'time_in' => now()->format('H:i:s'),
+            'time_in' => $submissionTime->format('H:i:s'),
             'time_out' => null,
         ]);
 

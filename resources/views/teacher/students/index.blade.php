@@ -91,4 +91,143 @@
             </script>
         </div>
     </div>
+
+    {{-- View Student Modals --}}
+    @foreach($students as $student)
+        <div class="modal" id="view-student-modal-{{ $student->id }}">
+            <div class="modal-content">
+                <div class="form-header">
+                    <h3>Student Information System</h3>
+                    <p>View Student Record</p>
+                    <h4>Student Details</h4>
+                </div>
+                <div class="form-section">
+                    <h5><i class="fas fa-user"></i> Personal Information</h5>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Institutional ID</label>
+                                <div class="view-field">{{ $student->student_id ?? 'N/A' }}</div>
+                            </div>
+                        </div>
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Full Name</label>
+                                <div class="view-field">{{ $student->name }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Email</label>
+                                <div class="view-field">{{ $student->email }}</div>
+                            </div>
+                        </div>
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Birthday</label>
+                                <div class="view-field">{{ $student->birthday?->format('F d, Y') ?? 'Not provided' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Gender</label>
+                                <div class="view-field">{{ $student->gender ?? 'Not provided' }}</div>
+                            </div>
+                        </div>
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Contact Number</label>
+                                <div class="view-field">{{ $student->contact_number ?? 'Not provided' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-col" style="grid-column: 1 / -1;">
+                            <div class="form-group">
+                                <label>Address</label>
+                                <div class="view-field">{{ $student->address ?? 'Not provided' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <h5><i class="fas fa-graduation-cap"></i> Academic Information</h5>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Course</label>
+                                <div class="view-field">{{ $student->course ?? 'Not Set' }}</div>
+                            </div>
+                        </div>
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Year Level</label>
+                                <div class="view-field">{{ $student->year_level ?? 'Not Set' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Section</label>
+                                <div class="view-field">
+                                    @if($student->section_id)
+                                        {{ $student->section ? $student->section->name : 'Section #' . $student->section_id }}
+                                    @else
+                                        Not Assigned
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <h5><i class="fas fa-users"></i> Guardian Information</h5>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Guardian Name</label>
+                                <div class="view-field">{{ $student->guardian_name ?? 'Not provided' }}</div>
+                            </div>
+                        </div>
+                        <div class="form-col">
+                            <div class="form-group">
+                                <label>Guardian Contact</label>
+                                <div class="view-field">{{ $student->guardian_contact ?? 'Not provided' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @if($student->documents && $student->documents->count() > 0)
+                <div class="form-section">
+                    <h5><i class="fas fa-file-alt"></i> Documents</h5>
+                    <div class="form-row">
+                        <div class="form-col" style="grid-column: 1 / -1;">
+                            <div class="form-group">
+                                @foreach($student->documents as $document)
+                                    <div style="background: #F9FAFB; padding: 12px; border-radius: 8px; margin-bottom: 8px;">
+                                        <div style="color: #111827; font-weight: 500;">{{ $document->document_name ?? 'Document' }}</div>
+                                        <div style="color: #6B7280; font-size: 0.875rem; margin-top: 4px;">
+                                            Uploaded: {{ $document->uploaded_at?->format('M d, Y') ?? 'N/A' }}
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @endif
+                <div class="modal-buttons">
+                    <button type="button" class="btn exit-btn" onclick="closeModal('view-student-modal-{{ $student->id }}')">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endforeach
+
 @endsection

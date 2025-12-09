@@ -9,8 +9,8 @@ use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 
 class ClassSessionController extends Controller
 {
@@ -82,13 +82,45 @@ class ClassSessionController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
+        // Parse time string to extract start_time and end_time
+        $timeString = $validated['time'];
+        $startTime = null;
+        $endTime = null;
+
+        // Try to parse time string like "8:00 AM - 9:30 AM" or "8:00AM-9:30AM"
+        if (preg_match('/(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i', $timeString, $matches)) {
+            $startHour = (int) $matches[1];
+            $startMinute = (int) $matches[2];
+            $startPeriod = strtoupper($matches[3]);
+            $endHour = (int) $matches[4];
+            $endMinute = (int) $matches[5];
+            $endPeriod = strtoupper($matches[6]);
+
+            // Convert to 24-hour format
+            if ($startPeriod === 'PM' && $startHour !== 12) {
+                $startHour += 12;
+            } elseif ($startPeriod === 'AM' && $startHour === 12) {
+                $startHour = 0;
+            }
+            if ($endPeriod === 'PM' && $endHour !== 12) {
+                $endHour += 12;
+            } elseif ($endPeriod === 'AM' && $endHour === 12) {
+                $endHour = 0;
+            }
+
+            $startTime = sprintf('%02d:%02d:00', $startHour, $startMinute);
+            $endTime = sprintf('%02d:%02d:00', $endHour, $endMinute);
+        }
+
         ClassSession::create([
-            'name' => $validated['code'] . ' - ' . $validated['subject'], // Generate name from code and subject
+            'name' => $validated['code'].' - '.$validated['subject'], // Generate name from code and subject
             'course' => $validated['course'],
             'course_id' => $validated['code'],
             'subject' => $validated['subject'],
             'schedule' => $validated['schedule'],
             'time' => $validated['time'],
+            'start_time' => $startTime,
+            'end_time' => $endTime,
             'instructor' => $validated['instructor'],
             'room' => $validated['room'],
             'description' => $validated['description'] ?? null,
@@ -153,13 +185,45 @@ class ClassSessionController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
+        // Parse time string to extract start_time and end_time
+        $timeString = $validated['time'];
+        $startTime = null;
+        $endTime = null;
+
+        // Try to parse time string like "8:00 AM - 9:30 AM" or "8:00AM-9:30AM"
+        if (preg_match('/(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i', $timeString, $matches)) {
+            $startHour = (int) $matches[1];
+            $startMinute = (int) $matches[2];
+            $startPeriod = strtoupper($matches[3]);
+            $endHour = (int) $matches[4];
+            $endMinute = (int) $matches[5];
+            $endPeriod = strtoupper($matches[6]);
+
+            // Convert to 24-hour format
+            if ($startPeriod === 'PM' && $startHour !== 12) {
+                $startHour += 12;
+            } elseif ($startPeriod === 'AM' && $startHour === 12) {
+                $startHour = 0;
+            }
+            if ($endPeriod === 'PM' && $endHour !== 12) {
+                $endHour += 12;
+            } elseif ($endPeriod === 'AM' && $endHour === 12) {
+                $endHour = 0;
+            }
+
+            $startTime = sprintf('%02d:%02d:00', $startHour, $startMinute);
+            $endTime = sprintf('%02d:%02d:00', $endHour, $endMinute);
+        }
+
         $classSession->update([
-            'name' => $validated['code'] . ' - ' . $validated['subject'], // Update name from code and subject
+            'name' => $validated['code'].' - '.$validated['subject'], // Update name from code and subject
             'course' => $validated['course'],
             'course_id' => $validated['code'],
             'subject' => $validated['subject'],
             'schedule' => $validated['schedule'],
             'time' => $validated['time'],
+            'start_time' => $startTime,
+            'end_time' => $endTime,
             'instructor' => $validated['instructor'],
             'room' => $validated['room'],
             'description' => $validated['description'] ?? null,

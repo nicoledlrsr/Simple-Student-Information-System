@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Teacher;
 
 use App\Http\Controllers\Controller;
-use App\Models\Attendance;
 use App\Mail\AttendanceCodeMail;
+use App\Models\Attendance;
 use App\Models\AttendanceCode;
 use App\Models\ClassSession;
 use App\Models\SessionEnrollment;
@@ -31,21 +31,47 @@ class AttendanceController extends Controller
     {
         $this->checkTeacher();
 
-        $attendances = Attendance::with(['user', 'subject', 'attendanceCode', 'attendanceCode.classSession'])
+        /** @var \App\Models\User $teacher */
+        $teacher = Auth::user();
+        $teacherCourse = $teacher->course;
+        $teacherYearLevel = $teacher->year_level;
+
+        // Get student IDs that match teacher's course and year level
+        $studentIds = User::where('role', 'student')
+            ->when($teacherCourse && $teacherYearLevel, function ($query) use ($teacherCourse, $teacherYearLevel) {
+                $query->where('course', $teacherCourse)
+                    ->where('year_level', $teacherYearLevel);
+            }, function ($query) {
+                // If course or year level not assigned to teacher, return none
+                $query->whereRaw('1 = 0');
+            })
+            ->pluck('id');
+
+        $attendances = Attendance::whereIn('user_id', $studentIds)
+            ->with(['user', 'subject', 'attendanceCode', 'attendanceCode.classSession'])
             ->orderBy('date', 'desc')
             ->orderBy('time_in', 'desc')
             ->paginate(20);
 
-        $classSessions = ClassSession::where('is_active', true)->orderBy('start_time')->get();
+        // Filter class sessions by teacher's course if available
+        $classSessions = ClassSession::where('is_active', true)
+            ->when($teacherCourse, function ($query) use ($teacherCourse) {
+                $query->where('course', $teacherCourse);
+            })
+            ->orderBy('start_time')
+            ->get();
 
+        // Filter codes to only show those created by this teacher
         $recentCodes = AttendanceCode::with(['classSession', 'creator'])
             ->where('is_active', true)
             ->where('expires_at', '>', now())
+            ->where('created_by', $teacher->id)
             ->orderBy('created_at', 'desc')
             ->limit(10)
             ->get();
 
         $allCodes = AttendanceCode::with(['classSession', 'creator'])
+            ->where('created_by', $teacher->id)
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -68,16 +94,93 @@ class AttendanceController extends Controller
 
         $classSession = ClassSession::findOrFail($validated['class_session_id']);
 
-        $sessionDate = now()->parse($validated['date']);
-        $endTime = now()->parse($classSession->end_time);
-        $expiresAt = $sessionDate->copy()->setTime($endTime->hour, $endTime->minute, $endTime->second);
-        if ($expiresAt->isPast() && $sessionDate->isToday()) {
-            $expiresAt = now()->endOfDay();
+        $sessionDate = now()->parse($validated['date'])->startOfDay();
+        $expiresAt = null;
+
+        // Parse end time from class session
+        if ($classSession->end_time) {
+            // Use end_time field if available (format: "09:30:00")
+            $endTimeParts = explode(':', $classSession->end_time);
+            // Set expiration to 2 minutes after class ends to allow submissions until class ends
+            $expiresAt = $sessionDate->copy()
+                ->setTime((int) $endTimeParts[0], (int) ($endTimeParts[1] ?? 0), (int) ($endTimeParts[2] ?? 0))
+                ->addMinutes(2);
+        } elseif ($classSession->time) {
+            // Fallback to parsing from time string field (format: "8:00 AM - 9:30 AM")
+            $timeString = trim($classSession->time);
+
+            // Try multiple patterns to handle different time formats
+            $endHour = null;
+            $endMinute = null;
+            $endPeriod = null;
+
+            // Pattern 1: "8:00 AM - 9:30 AM" or "8:00 AM to 9:30 AM" (with spaces)
+            if (preg_match('/(\d{1,2}):(\d{2})\s*(AM|PM)\s*[-to]+\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i', $timeString, $matches)) {
+                $endHour = (int) $matches[4];
+                $endMinute = (int) $matches[5];
+                $endPeriod = strtoupper($matches[6]);
+            }
+            // Pattern 2: "8:00AM-9:30AM" (no spaces between time and AM/PM)
+            elseif (preg_match('/(\d{1,2}):(\d{2})(AM|PM)\s*[-to]+\s*(\d{1,2}):(\d{2})(AM|PM)/i', $timeString, $matches)) {
+                $endHour = (int) $matches[4];
+                $endMinute = (int) $matches[5];
+                $endPeriod = strtoupper($matches[6]);
+            }
+
+            // If we found a match, convert to 24-hour format and set expiration
+            if ($endHour !== null && $endMinute !== null && $endPeriod !== null) {
+                // Convert to 24-hour format
+                if ($endPeriod === 'PM' && $endHour !== 12) {
+                    $endHour += 12;
+                } elseif ($endPeriod === 'AM' && $endHour === 12) {
+                    $endHour = 0;
+                }
+
+                // Set expiration to 2 minutes after class ends to allow submissions until class ends
+                // This accounts for clock differences and ensures students can submit until the class actually ends
+                $expiresAt = $sessionDate->copy()
+                    ->setTime($endHour, $endMinute, 0)
+                    ->addMinutes(2);
+            }
+        }
+
+        // If we still don't have a valid expiration time, return error with helpful message
+        if (! $expiresAt) {
+            $sessionName = $classSession->name ?? 'Selected session';
+            $hasEndTime = ! empty($classSession->end_time);
+            $hasTime = ! empty($classSession->time);
+
+            $errorMessage = "Unable to determine class end time for '{$sessionName}'. ";
+            if (! $hasEndTime && ! $hasTime) {
+                $errorMessage .= "The class session is missing time information. Please contact an administrator to update the class session with a valid time (e.g., '8:00 AM - 9:30 AM').";
+            } elseif ($hasTime) {
+                $errorMessage .= "The time format '{$classSession->time}' could not be parsed. Please ensure the time is in the format '8:00 AM - 9:30 AM'.";
+            } else {
+                $errorMessage .= 'Please contact an administrator to update the class session time configuration.';
+            }
+
+            Log::warning('Failed to determine class end time for attendance code generation', [
+                'class_session_id' => $classSession->id,
+                'class_session_name' => $sessionName,
+                'has_end_time' => $hasEndTime,
+                'has_time' => $hasTime,
+                'end_time_value' => $classSession->end_time,
+                'time_value' => $classSession->time,
+                'teacher_id' => Auth::id(),
+            ]);
+
+            return redirect()->route('teacher.attendance.index')
+                ->with('error', $errorMessage);
         }
 
         do {
             $code = strtoupper(substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZ23456789'), 0, 6));
         } while (AttendanceCode::where('code', $code)->where('is_active', true)->exists());
+
+        /** @var \App\Models\User $teacher */
+        $teacher = Auth::user();
+        $teacherCourse = $teacher->course;
+        $teacherYearLevel = $teacher->year_level;
 
         $attendanceCode = AttendanceCode::create([
             'class_session_id' => $validated['class_session_id'],
@@ -85,10 +188,18 @@ class AttendanceController extends Controller
             'date' => $validated['date'],
             'expires_at' => $expiresAt,
             'is_active' => true,
-            'created_by' => Auth::id(),
+            'created_by' => $teacher->id,
         ]);
 
+        // Only get students that match the teacher's course and year level
         $registeredStudents = User::where('role', 'student')
+            ->when($teacherCourse && $teacherYearLevel, function ($query) use ($teacherCourse, $teacherYearLevel) {
+                $query->where('course', $teacherCourse)
+                    ->where('year_level', $teacherYearLevel);
+            }, function ($query) {
+                // If course or year level not assigned to teacher, return none
+                $query->whereRaw('1 = 0');
+            })
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('enrollments')
@@ -146,11 +257,16 @@ class AttendanceController extends Controller
     {
         $this->checkTeacher();
 
-        $code = AttendanceCode::findOrFail($id);
+        /** @var \App\Models\User $teacher */
+        $teacher = Auth::user();
+
+        $code = AttendanceCode::where('id', $id)
+            ->where('created_by', $teacher->id)
+            ->firstOrFail();
+
         $code->update(['is_active' => false]);
 
         return redirect()->route('teacher.attendance.index')
             ->with('success', 'Attendance code deactivated successfully.');
     }
 }
-

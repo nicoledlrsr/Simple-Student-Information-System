@@ -56,4 +56,16 @@ class AttendanceCode extends Model
     {
         return $this->is_active && ! $this->isExpired();
     }
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        // Automatically deactivate expired codes when accessed
+        static::retrieved(function (AttendanceCode $code) {
+            if ($code->is_active && $code->isExpired()) {
+                $code->update(['is_active' => false]);
+            }
+        });
+    }
 }

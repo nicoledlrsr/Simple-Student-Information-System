@@ -8,7 +8,12 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     libzip-dev \
     zip \
+    curl \
     && docker-php-ext-install pdo pdo_mysql zip
+
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs
 
 # Enable Apache rewrite module (needed for Laravel routes)
 RUN a2enmod rewrite
@@ -24,6 +29,9 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader
+
+# Install npm dependencies and build frontend assets
+RUN npm install && npm run build
 
 # Set Apache document root to Laravel's public folder
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
